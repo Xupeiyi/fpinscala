@@ -1,5 +1,7 @@
 package fpinscala.exercises.datastructures
 
+import scala.annotation.tailrec
+
 /** `List` data type, parameterized on a type, `A`. */
 enum List[+A]:
   /** A `List` data constructor representing the empty list. */
@@ -49,17 +51,34 @@ object List: // `List` companion object. Contains functions for creating and wor
 
   def tail[A](l: List[A]): List[A] =
     l match
-      case Nil => sys.error("message")
-      case Cons(x, xs) => xs
+      case Nil => sys.error("tail of empty list")
+      case Cons(_, xs) => xs
+
+  def setHead[A](l: List[A], h: A): List[A] =
+    l match
+      case Nil => sys.error("empty list")
+      case Cons(x, xs) => Cons(h, xs)
+
+  @annotation.tailrec
+  def drop[A](l: List[A], n: Int): List[A] =
+    if n <= 0 then l
+    else l match
+      case Nil => l
+      case Cons(_, xs) => drop(xs, n - 1)
+
+  @annotation.tailrec
+  def dropWhile[A](l: List[A], f: A => Boolean): List[A] =
+    l match
+      case Nil => l
+      case Cons(x, xs) => if f(x) then dropWhile(xs, f) else l
 
 
-  def setHead[A](l: List[A], h: A): List[A] = ???
+  def init[A](l: List[A]): List[A] =
+    l match
+      case Nil => sys.error("empty list")
+      case Cons(_, Nil) => Nil
+      case Cons(x, xs) => Cons(x, init(xs))
 
-  def drop[A](l: List[A], n: Int): List[A] = ???
-
-  def dropWhile[A](l: List[A], f: A => Boolean): List[A] = ???
-
-  def init[A](l: List[A]): List[A] = ???
 
   def length[A](l: List[A]): Int = ???
 
