@@ -47,7 +47,11 @@ object List: // `List` companion object. Contains functions for creating and wor
   def productViaFoldRight(ns: List[Double]): Double =
     foldRight(ns, 1.0, _ * _) // `_ * _` is more concise notation for `(x,y) => x * y`; see sidebar
 
-  def tail[A](l: List[A]): List[A] = ???
+  def tail[A](l: List[A]): List[A] =
+    l match
+      case Nil => sys.error("message")
+      case Cons(x, xs) => xs
+
 
   def setHead[A](l: List[A], h: A): List[A] = ???
 
