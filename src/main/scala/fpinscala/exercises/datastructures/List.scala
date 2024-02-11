@@ -107,20 +107,44 @@ object List: // `List` companion object. Contains functions for creating and wor
   def concat[A](l: List[List[A]]): List[A] =
     foldLeft(l, List[A](), (acc, h) => appendViaFoldRight(acc, h))
 
-  def incrementEach(l: List[Int]): List[Int] = ???
+  def incrementEach(l: List[Int]): List[Int] =
+    l match
+      case Nil => Nil
+      case Cons(h, t) => Cons(h + 1, incrementEach(t))
 
-  def doubleToString(l: List[Double]): List[String] = ???
+  def doubleToString(l: List[Double]): List[String] =
+    l match
+      case Nil => Nil
+      case Cons(h, t) => Cons(h.toString, doubleToString(t))
 
-  def map[A,B](l: List[A], f: A => B): List[B] = ???
+  def map[A,B](l: List[A], f: A => B): List[B] =
+    l match
+      case Nil => Nil
+      case Cons(h, t) => Cons(f(h), map(t, f))
 
-  def filter[A](as: List[A], f: A => Boolean): List[A] = ???
+  def filter[A](as: List[A], f: A => Boolean): List[A] =
+    as match
+      case Nil => Nil
+      case Cons(h, t) => if f(h) then Cons(h, filter(t, f)) else filter(t, f)
 
-  def flatMap[A,B](as: List[A], f: A => List[B]): List[B] = ???
+  def flatMap[A,B](as: List[A], f: A => List[B]): List[B] =
+    as match
+      case Nil => Nil
+      case Cons(_, _) => concat(map(as, f))
 
-  def filterViaFlatMap[A](as: List[A], f: A => Boolean): List[A] = ???
+  def filterViaFlatMap[A](as: List[A], f: A => Boolean): List[A] =
+    flatMap(as, x => if f(x) then List[A](x) else List[A]())
 
-  def addPairwise(a: List[Int], b: List[Int]): List[Int] = ???
+  def addPairwise(a: List[Int], b: List[Int]): List[Int] =
+    (a, b) match
+      case (Nil, _) => Nil
+      case (_, Nil) => Nil
+      case (Cons(ha, ta), Cons(hb, tb)) => Cons(ha + hb, addPairwise(ta, tb))
 
-  // def zipWith - TODO determine signature
+  def zipWith[A, B, C](a: List[A], b: List[B], f: (A, B) => C): List[C] =
+    (a, b) match
+      case (Nil, _) => Nil
+      case (_, Nil) => Nil
+      case (Cons(ha, ta), Cons(hb, tb)) => Cons(f(ha, hb), zipWith(ta, tb, f))
 
   def hasSubsequence[A](sup: List[A], sub: List[A]): Boolean = ???
