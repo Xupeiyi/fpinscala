@@ -4,7 +4,9 @@ enum LazyList[+A]:
   case Empty
   case Cons(h: () => A, t: () => LazyList[A])
 
-  def toList: List[A] = ???
+  def toList: List[A] = this match
+    case Empty => Nil
+    case Cons(h, t) => h() :: t().toList
 
   def foldRight[B](z: => B)(f: (A, => B) => B): B = // The arrow `=>` in front of the argument type `B` means that the function `f` takes its second argument by name and may choose not to evaluate it.
     this match
@@ -19,11 +21,17 @@ enum LazyList[+A]:
     case Empty => None
     case Cons(h, t) => if (f(h())) Some(h()) else t().find(f)
 
-  def take(n: Int): LazyList[A] = ???
+  def take(n: Int): LazyList[A] = this match
+    case Empty => Empty
+    case Cons(h, t) => if n == 0 then Empty else Cons(h, () => t().take(n-1))
 
-  def drop(n: Int): LazyList[A] = ???
+  def drop(n: Int): LazyList[A] = this match
+    case Empty => Empty
+    case Cons(h, t) => if n == 0 then this else t().drop(n-1)
 
-  def takeWhile(p: A => Boolean): LazyList[A] = ???
+  def takeWhile(p: A => Boolean): LazyList[A] = this match
+    case Empty => Empty
+    case Cons(h, t) => if p(h()) then Cons(h, () => t().takeWhile(p)) else t().takeWhile(p)
 
   def forAll(p: A => Boolean): Boolean = ???
 
