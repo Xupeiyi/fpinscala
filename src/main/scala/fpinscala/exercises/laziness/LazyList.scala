@@ -1,5 +1,7 @@
 package fpinscala.exercises.laziness
 
+import LazyList.*
+
 enum LazyList[+A]:
   case Empty
   case Cons(h: () => A, t: () => LazyList[A])
@@ -29,16 +31,32 @@ enum LazyList[+A]:
     case Empty => Empty
     case Cons(h, t) => if n == 0 then this else t().drop(n-1)
 
-  def takeWhile(p: A => Boolean): LazyList[A] = this match
-    case Empty => Empty
-    case Cons(h, t) => if p(h()) then Cons(h, () => t().takeWhile(p)) else t().takeWhile(p)
+  def takeWhile(p: A => Boolean): LazyList[A] =
+//     this match
+//        case Empty => Empty
+//        case Cons(h, t) if p(h()) => cons(h(), t().takeWhile(p))
+    foldRight(empty[A])((a, b) => if p(a) then cons(a, b) else empty)
 
-  def forAll(p: A => Boolean): Boolean = ???
+  def forAll(p: A => Boolean): Boolean =
+    foldRight(true)((a, b) => p(a) && b)
 
-  def headOption: Option[A] = ???
+  def headOption: Option[A] =
+    foldRight(None: Option[A])((a, _) => Some(a))
+
 
   // 5.7 map, filter, append, flatmap using foldRight. Part of the exercise is
   // writing your own function signatures.
+  def map[B](f: A => B): LazyList[B] =
+    foldRight(empty[B])((a, b) => cons(f(a), b))
+
+  def filter(p: A => Boolean): LazyList[A] =
+    foldRight(empty)((a, b) => if p(a) then cons(a, b) else b)
+
+  def append[A2>:A](a2: LazyList[A2]): LazyList[A2] =  // ?
+    foldRight(a2)(cons)
+
+  def flatMap[B](f: A => LazyList[B]): LazyList[B] =
+    foldRight(empty[B])((a, b) => f(a).append(b))
 
   def startsWith[B](s: LazyList[B]): Boolean = ???
 
