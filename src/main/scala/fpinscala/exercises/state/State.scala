@@ -1,5 +1,7 @@
 package fpinscala.exercises.state
 
+import scala.annotation.tailrec
+
 
 trait RNG:
   def nextInt: (Int, RNG) // Should generate a random `Int`. We'll later define other functions in terms of `nextInt`.
@@ -30,9 +32,11 @@ object RNG:
     val (i, r) = rng.nextInt
     (if i < 0 then -(i + 1) else i, r)
 
-  def double(rng: RNG): (Double, RNG) =
-    val (i, r) = nonNegativeInt(rng)
-    (i / (Int.MaxValue.toDouble + 1), r)
+  //def double(rng: RNG): (Double, RNG) =
+    // val (i, r) = nonNegativeInt(rng)
+    // (i / (Int.MaxValue.toDouble + 1), r)
+  def double: Rand[Double] =
+    map(nonNegativeInt)(_ / (Int.MaxValue.toDouble + 1))
 
   def intDouble(rng: RNG): ((Int,Double), RNG) =
     val (i, r1) = rng.nextInt
@@ -56,15 +60,29 @@ object RNG:
       val (list, r2) = ints(count-1)(r1)
       (i::list, r2)
 
-  def map2[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] = ???
+  def map2[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] =
+    rng =>
+      val (a, rng1) = ra(rng)
+      val (b, rng2) = rb(rng1)
+      (f(a, b), rng2)
 
   def sequence[A](rs: List[Rand[A]]): Rand[List[A]] = ???
 
-  def flatMap[A, B](r: Rand[A])(f: A => Rand[B]): Rand[B] = ???
+  def flatMap[A, B](r: Rand[A])(f: A => Rand[B]): Rand[B] =
+    rng0 =>
+      val (a, rng1) = r(rng0)
+      f(a)(rng1)
 
-  def mapViaFlatMap[A, B](r: Rand[A])(f: A => B): Rand[B] = ???
+  def nonNegativeLessThan(n: Int): Rand[Int] =
+    flatMap(nonNegativeInt): i =>
+        val mod = i % n
+        if i + (n - 1) - mod >= 0 then unit(mod) else nonNegativeLessThan(n)
 
-  def map2ViaFlatMap[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] = ???
+  def mapViaFlatMap[A, B](r: Rand[A])(f: A => B): Rand[B] =
+    flatMap(r)(a => unit(f(a)))
+
+  def map2ViaFlatMap[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] =
+    flatMap(ra)(a => map(rb)(b => f(a, b)))
 
 opaque type State[S, +A] = S => (A, S)
 
