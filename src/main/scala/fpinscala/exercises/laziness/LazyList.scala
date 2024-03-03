@@ -91,6 +91,12 @@ enum LazyList[+A]:
 
   def startsWith[B](s: LazyList[B]): Boolean = ???
 
+  def tails: LazyList[LazyList[A]] =
+    unfold(this):
+      case Cons(h, t) => Some((Cons(h, t), t()))
+      case _ => None
+    .append(LazyList(empty))
+
 
 object LazyList:
   def cons[A](hd: => A, tl: => LazyList[A]): LazyList[A] = 
