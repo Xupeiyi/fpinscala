@@ -92,4 +92,34 @@ We are no longer calling `unit` in the recursive case. Currently, it becomes unc
 whether `unit` should accept its argument lazily.
 
 Should `map2` take its arguments lazily? We want `pa` and `pb` to run in parallel. Which
-choice let us implement this meaning?
+choice let us implement this meaning? If `map2` is strict, we must execute the left half 
+of the computation before constructing the right half (since Scala evaluates arguments 
+from left to right). If we don't have `map2` begin execution immediately, we may end up 
+with very heavy objects describing the computation. Therefore, we should make `map2` lazy
+and have it immediately begin execution of both sides in parallel.
+
+### 7.1.3 Explicit forking
+A problem with our lastest choice: We may not always want to evaluate the arguments of 
+`map2` in parallel. The current API doesn't give user control on when computations get 
+forked off the main thread. Invent a `fork` function
+```scala worksheet
+def fork[A](a: => Par[A]): Par[A]
+```
+for explicit forking. Use it to rewrite the `sum` function
+```scala worksheet
+def sum(ints: IndexedSeq[Int]): Par[Int] =
+  if ints.size <= 1 then
+    Par.unit(ints.headOption.getOrElse(0))
+  else
+    val (l, r) = ints.splitAt(ints.size / 2)
+    Par.map2(Par.fork(sum(l)), Par.fork(sum(r)))(_ + _)
+```
+With `fork` we can now make `map2` strict. Here `fork` addresses two concerns:
+1. how to indicate the combination of two tasks' results
+2. should a task be run asynchronously
+
+By keeping these concerns separate, we avoid having a global policy for parallelism of
+`map2` and other operations.
+
+ 
+
