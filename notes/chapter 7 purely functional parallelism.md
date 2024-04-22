@@ -14,9 +14,9 @@ def sum(ints: IndexedSeq[Int]): Int =
 ```
 we want to run the two halves in parallel.
 
-> Design tips:
->1. start with a simple example, and then add complexity gradually
->2. design ideal APIs first, and then work for an implementation
+Design tips:
+1. start with a simple example, and then add complexity gradually
+2. design ideal APIs first, and then work for an implementation
 
 
 ### 7.1.1 A data type for parallel computations
@@ -55,11 +55,13 @@ and Runnable because they do not return a meaningful value, which hurts
 compositionality. Besides, Thread maps directly to actual OS threads, not 
 logical threads.
 
-Now we must choose the meaning of `unit` and `get`:
-1. `unit` starts evaluation immediately in a separate thread
-2. `unit` starts evaluation after `get` is called.
+> Choose - the meaning of `unit` and `get`
+> 1. `unit` starts evaluation immediately in a separate thread
+> 2. `unit` starts evaluation after `get` is called.  
 
-We cannot choose option 2. This is because function arguments in Scala are 
+Answer: Choose option 1 
+
+Reason: We cannot choose option 2. This is because function arguments in Scala are 
 strictly evaluated from left to right. If we choose option 2, then we will
 spawn the parallel computation, wait for it to finish, then spawn the second 
 parallel computation. This means the computation is effectively sequential.
@@ -68,7 +70,7 @@ But choosing option 1 breaks referential transparency. For
 ```
 Par.get(sumL) + Par.get(sumR)
 ```
-replacing sumL and sumR with Par.unit(sum(l)) and Par.unit(sum(r)) makes the 
+replacing `sumL` and `sumR` with `Par.unit(sum(l))` and `Par.unit(sum(r))` makes the 
 computation no longer parallel. We can see `unit` has a side effect but only 
 with regard to `get`. So we should avoid calling `get` or at least wait till 
 the end.
@@ -90,16 +92,21 @@ def map2[A, B, C](pa: Par[A], pb: Par[B])(f: (A, B) => C): Par[C]
 ```
 We are no longer calling `unit` in the recursive case. Currently, it becomes unclear 
 whether `unit` should accept its argument lazily.
+> Choose - the laziness of `map2`
+> 1. `map2` takes its arguments lazily
+> 2. `map2` takes its arguments strictly
 
-Should `map2` take its arguments lazily? We want `pa` and `pb` to run in parallel. Which
-choice let us implement this meaning? If `map2` is strict, we must execute the left half 
-of the computation before constructing the right half (since Scala evaluates arguments 
-from left to right). If we don't have `map2` begin execution immediately, we may end up 
-with very heavy objects describing the computation. Therefore, we should make `map2` lazy
+Answer: Choose option 1.
+
+Reason: We want `pa` and `pb` to run in parallel. Which choice let us implement this 
+meaning? If `map2` is strict, we must execute the left half of the computation before 
+constructing the right half (since Scala evaluates arguments from left to right). 
+If we don't have `map2` begin execution immediately, we may end up with very heavy 
+objects describing the computation. Therefore, we should make `map2` lazy
 and have it immediately begin execution of both sides in parallel.
 
 ### 7.1.3 Explicit forking
-A problem with our lastest choice: We may not always want to evaluate the arguments of 
+A problem with our latest choice: We may not always want to evaluate the arguments of 
 `map2` in parallel. The current API doesn't give user control on when computations get 
 forked off the main thread. Invent a `fork` function
 ```scala worksheet
@@ -121,5 +128,47 @@ With `fork` we can now make `map2` strict. Here `fork` addresses two concerns:
 By keeping these concerns separate, we avoid having a global policy for parallelism of
 `map2` and other operations.
 
+And with `fork` we can also make `unit` strict. We can have strict and non-strict `unit`
+using `fork`:
+```scala worksheet
+def unit[A](a: A): Par[A]
+
+def lazyUnit[A](a: => A): Par[A] = fork(unit(a))
+```
+Here `lazyUnit` is a *derived combinator* as opposed to a *primitive combinator*. 
+It won't care about the implementation of `Par` as long as it exposes `fork` and 
+`unit`.
+
+Should fork starts the evaluation immediately, or when the computation is forced 
+later? In other words,
+> Choose - the responsibility of evaluation
+> 1. it belongs to `fork`
+> 2. it belongs to `get`
  
 
+Answer: Choose option 2.
+
+Reason: Think about the required information to implement `fork` and `get`. 
+If `fork` starts the evaluation immediately, it must know things about threads 
+or thread pools. This means the resource for parallelism (i.e. the thread pool) 
+must be accessible and initialized wherever fork is called. To have more 
+fine-grained control, we give this responsibility to `get`.
+
+With this design, `Par` becomes a description of a parallel computation that
+can be run later, rather than a container of a value which can be got
+later.
+
+We rename `get` to `run`, and it needs some means to implement parallelism.
+```scala worksheet
+extension [A](pa: Par[A]) def run: A
+```
+
+## 7.2 Picking a representation
+Make use of the Java Standard Library: java.util.concurrent.ExecutorService. 
+We can submit a Callable to ExecutorService and obtain a Future.
+
+Let's assume the `run` function has the following signature, and see how it
+indicates the representation of `Par`:
+```scala worksheet
+extension [A](pa: Par[A]) def run(s: ExecutorService): A
+```
