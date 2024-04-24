@@ -167,8 +167,89 @@ extension [A](pa: Par[A]) def run: A
 Make use of the Java Standard Library: java.util.concurrent.ExecutorService. 
 We can submit a Callable to ExecutorService and obtain a Future.
 
-Let's assume the `run` function has the following signature, and see how it
-indicates the representation of `Par`:
+For `run` we want it to return a `Future[A]` rather than `A`, so that the caller
+of run can decide things like how long to wait for a computation, or whether
+to cancel it.
+
 ```scala worksheet
-extension [A](pa: Par[A]) def run(s: ExecutorService): A
+opaque type Par[A] = ExecutorService => Future[A]
+extension [A](pa: Par[A]) def run(s: ExecutorService): Future[A] = pa(s)
+```
+
+### 7.2.1 Refining the API
+In reality, there's no clear boundaries between designing the API and choosing a 
+representation.
+
+The first version of implementation:
+```scala worksheet
+object Par:
+  def unit[A](a: A): Par[A] = es => UnitFuture(a)
+  
+  private case class UnitFuture[A](get: A) extends Future[A]:
+    def isDone = true
+    def get(timeout:Long, units: TimeUnit) = get
+    def isCancelled = false
+    def cancel(evenIfRunning: Boolean): Boolean = false
+
+  extension [A](pa: Par[A])
+    def map2[B, C](pb: Par[B])(f: (A, B) => C): Par[C] =
+      (es: ExecutorService) =>
+        val futureA = a(es)
+        val futureB = b(es)
+        UnitFuture(f(futuerA.get, futuerB.get))
+        
+  def fork[A](a :=> Par[A]): Par[A] = 
+    es => es.submit(new Callable[A] {
+      def call = a(es).get
+    })
+```
+
+`Future` does not have a purely functional interface, but the `Par` API remains pure.
+
+We can define an `asyncF` function to convert a function to an asynchronous one:
+```scala worksheet
+def asyncF[A, B](f: A=> B): A => Par[B] = 
+  a => lazyUnit(f(a))
+```
+
+What else can the existing combinators represent? The author gives another example 
+on sorting the list resulted from a `Par`. The function signature is 
+```scala worksheet
+def sortPar(parList: Par[List[Int]]): Par[List[Int]]
+```
+A simple idea is to run the `Par`, sort the list, and wrap it in another `Par`. But 
+we can use `map2` to avoid calling `run`.
+```scala worksheet
+def sortPar(parList: Par[List[Int]]): Par[List[Int]] =
+  parList.map2(unit(()))((a, _) => a.sorted)
+```
+In general, we can lift any function of type `A => B` to `Par[A] => Par[B]` with this 
+`map` function:
+```scala worksheet
+extension [A](pa: Par[A]) def map[B](f: A => B): Par[B] =
+  pa.map2(unit(()))((a, _) => f(a))
+```
+and rewrite `sortPar`:
+```scala worksheet
+def sortPar(parList: Par[List[Int]]) =
+  parList.map(_.sorted)
+```
+It's ok to pass a bogus value `unit(())` to `map2` to implement `map`, and this shows
+that `map2` is more powerful.
+We can further define a `parMap` function to `map` over a list in parallel, which is 
+even more generic than `map2`. A naive solution:
+```scala worksheet
+def sequence[A](pas: List[Par[A]]): Par[List[A]] =
+  pas.foldRight(unit(List.empty[A]))((pa, acc) => pa.map2(acc)(_::_))
+  
+def parMap[A, B](ps: List[A])(f: A=> B): Par[List[B]] = fork:
+    val fbs: List[Par[B]] = ps.map(asyncF(f))
+    sequence(fbs)
+```
+
+It's also possible to filter the elements in parallel using the existing methods:
+```scala worksheet
+def parFilter[A](as: List[A])(f: A => Boolean): Par[List[A]] = fork:
+    val pars: List[Par[List[A]]] = l.map(asyncF(a => if f(a) then List(a) else List()))
+    sequence(pars).map(_.flatten) 
 ```
