@@ -253,3 +253,31 @@ def parFilter[A](as: List[A])(f: A => Boolean): Par[List[A]] = fork:
     val pars: List[Par[List[A]]] = l.map(asyncF(a => if f(a) then List(a) else List()))
     sequence(pars).map(_.flatten) 
 ```
+
+## 7.3 The algebra of an API
+Treat the API as an algebra or an abstract set of operations, along with a set of 
+laws or properties assumed to be true.
+
+A law places constraints on operations' meanings, determines the feasibility of
+implementations, and affects what properties can be true.
+### 7.3.1 The law of mapping
+We can start making a law of identity (equivalence). For example,
+```scala worksheet
+unit(1).map(_ + 1) == unit(2)
+
+// or in general,
+unit(x).map(f) == unit(f(x))
+```
+This leads to the question of what "equivalent" means here. Currently, we see two 
+`Par` objects are equivalent if for any valid ExecutorService argument, their 
+`Future` results have the same value. This means `map` and `unit` cannot use
+downcasting or `isInstanceOf` checks, otherwise `f` may receive a different result.
+
+Since this law holds for any `x` and `f`, we have this special case:
+```scala worksheet
+y.map(id) == y
+```
+
+This is even better since the new and simpler law is only about `map`. We now can
+see `map` cannot throw an exception before applying the function to the result. It 
+can only apply `f` to `y`.
