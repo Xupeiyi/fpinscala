@@ -236,8 +236,8 @@ def sortPar(parList: Par[List[Int]]) =
 ```
 It's ok to pass a bogus value `unit(())` to `map2` to implement `map`, and this shows
 that `map2` is more powerful.
-We can further define a `parMap` function to `map` over a list in parallel, which is 
-even more generic than `map2`. A naive solution:
+We can further define a `parMap` function to `map` over a list in parallel. A naive 
+solution:
 ```scala worksheet
 def sequence[A](pas: List[Par[A]]): Par[List[A]] =
   pas.foldRight(unit(List.empty[A]))((pa, acc) => pa.map2(acc)(_::_))
