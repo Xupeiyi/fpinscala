@@ -281,3 +281,46 @@ y.map(id) == y
 This is even better since the new and simpler law is only about `map`. We now can
 see `map` cannot throw an exception before applying the function to the result. It 
 can only apply `f` to `y`.
+
+### 7.3.2 The law of forking & 7.3.3 Breaking the law: A subtle bug
+It may look obvious that `fork` shouldn't affect the result of the computation:
+```scala worksheet
+fork(x) == x
+```
+This should hold true for any choice of `x` and any choice of `ExecutorService`.
+But we have a counterexample:
+```scala worksheet
+val a = lazyUnit(42 + 1)
+val es = Executors.newFixedThreadPool(1)
+println(Par.eq(es)(a, fork(a)))
+```
+This will result in deadlocking. Because we implement `fork` as 
+```scala worksheet
+def fork[A](a :=> Par[A]): Par[A] = 
+  es => es.submit(new Callable[A] { def call = a(es).get })
+```
+We are submitting the `Callable` first, and within it, we're submitting another 
+`Callable` and blocking on its result. Since there's only one thread in the 
+thread pool we are having a deadlock.  
+
+We can try to fix `fork` with a different implmentation
+```scala worksheet
+def fork[A](fa: => Par[A]): Par[A] =
+  es => fa(es)
+```
+but it actually isn't creating a separate logical thread. It's still a useful
+combinator. We can call it `delay` since it delays the instantiation of a 
+computation.
+
+### 7.3.4 A fully non-blocking Par implementation using actors
+(Skipping this section temporarily)
+
+## 7.4 Refining combinators to their most general form
+Suppose we want a function to choose between two forking computations based on
+the result of an initial computation:
+```scala worksheet
+def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A]
+  es =>
+    if cond.run(es).get then t(es)
+    else f(es)
+```
