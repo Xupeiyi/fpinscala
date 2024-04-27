@@ -324,3 +324,30 @@ def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A]
     if cond.run(es).get then t(es)
     else f(es)
 ```
+To meet a more general requirement, we can choose between N computations:
+```scala worksheet
+def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A]
+```
+`List` seems to be arbitrary. We can choose from a `Map`, not just a `List`:
+```scala worksheet
+def choiceMap[K, V](key: Par[K])(choices: Map[K, Par[V]]): Par[V]
+```
+
+There's a function that unifies all the three functions above:
+```scala worksheet
+extension [A](pa: Par[A]) def chooser[B](choices: A => Par[B]): Par[B]
+```
+Since it has a more general meaning, `chooser` is no longer a suitable name.
+The second function `A => Par[B]` simply uses the result of `Par[A]`. This function
+is usually called `bind` or `flatMap`.  
+
+There are two steps in `faltMap`:
+1. mapping `f: A => Par[B]` over `Par[A]`, which generates a `Par[Par[B]]`
+2. flattening `Par[Par[B]]` to `Par[B]`
+We can define a `join` function to convert `Par[Par[B]]` to `Par[B]`
+```scala worksheet
+def join[A](ppa: Par[Par[A]]): Par[A]
+```
+
+
+
