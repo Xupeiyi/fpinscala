@@ -108,3 +108,27 @@ extension [A](self: Gen[A])
 ```
 Play with these APIs to choose a small yet expressive set of primitives.
 
+### 8.1.5 Generators that depend on generated values
+We need a `flatMap` method that lets one generator depend on another.
+```scala worksheet
+extension [A](self: Gen[A]) def flatMap[B](f: A => Gen[B]): Gen[B] =
+  State.flatMap(self)(f)
+```
+We can use this `flatMap` to define implement a new version of `listOfN`, whose 
+length N is a randomly generated Int:
+```scala worksheet
+extension [A](self: Gen[A]) def listOfN(size: Gen[Int]): Gen[List[A]] =
+  size.flatMap(listOfN)
+```
+`union`, whose value is pulled randomly from one of the two generators:
+```scala worksheet
+def union[A](g1: Gen[A], g2:Gen[A]): Gen[A] =
+  boolean.flatMap(b => if b then g1 else g2)
+```
+`weighted`, who randomly choose one of the two generators based on their
+weights:
+```scala worksheet
+def weighted[A](g1: (Gen[A], Double), g2: (Gen[A], Double)): Gen[A]
+  val g1Threshold = g1._2.abs / (g1._2.abs + g2_2abs)
+  State(RNG.double).flatMap(d => if d <= g1Threshold then g1._1 else g2._1)
+```
