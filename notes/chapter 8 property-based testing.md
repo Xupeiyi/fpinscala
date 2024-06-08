@@ -212,3 +212,76 @@ extension (self: Prop) def ||(that: Prop): Prop =
     case Falsified(_, _) => that(n, rng)
     case x => x
 ```
+## 8.2 Test case minimization
+There are two ways to find the smallest or simplest failing 
+test case.
+- Shrinking: After failing a test case, run a separate procedure to 
+minimize the test case by successively decreasing its size until it no longer 
+fails.
+- Sized Generation: Generate the test cases in order of increasing size 
+and complexity until finding a failure.
+
+Here we'll choose the sized generation, making use of `Gen`:
+```scala worksheet
+opaque type SGen[+A] = Int => Gen[A]
+```
+Introducing `SGen` will have an impact to `Prop` and `Prop.forAll`, because
+`SGen` requires a size as an input. Currently `Prop` cannot provide that. 
+We can have `Prop` accept another argument for the maximum size of test cases
+it can generate.
+```scala worksheet
+opaque type MaxSize = Int
+object MaxSize:
+  extension (x: MaxSize) def toInt: Int = x
+  extension (x: Int) def fromInt: MaxSize = x
+
+opaque type Prop = (MaxSize, TestCases, RNG) => Result
+
+object Prop:
+  def forAll[A](g: SGen[A])(f: A => Boolean): Prop =
+    (max, n, rng) => 
+      val casesPerSize = (n.toInt - 1) / max.toInt + 1
+      val props: LazyList[Prop] = 
+        LazyList.from(0)
+          .take((n.toInt min max.toInt) + 1)
+          .map(i => forAll(g(i))(f))
+      val prop: Prop =
+        props.map[Prop](p => (max, n, rng) => 
+          p(max, casesPerSize, rng)    
+        ).toList.reduce(_ && _)  
+      prop(max, n, rng)
+      
+```
+### 8.2.1 Using the library and improving its usability
+Try using this library to construct tests and see if there's deficiencies
+in expressiveness and usability
+
+### 8.2.2 Some simple examples
+Let's test `List.max`.
+```scala worksheet
+val samllInt = Gen.choose(-10, 10)
+
+val maxProp = Prop.forAll(smallInt.list): l => 
+  val max = l.max
+  l.forall(_ <= max)
+```
+
+We have not yet defined `check` to evaluate a `Prop`. Let's do that now:
+```scala worksheet
+extension (self: Prop)
+  def check(maxSize: MaxSize = 100, 
+            testCases: TestCases = 100,
+            rng: RNG = RNG.Simple(System.currentTimeMillis)): Result =
+    self(maxSize, testCases, rng)
+```
+And define a helper function for running the `Prop` and printing the results
+to the console:
+```scala worksheet
+extension (self: Prop)
+  def run(maxSize: MaxSize = 100,
+          testCases: TestCases = 100,
+          rng: RNG = RNG.Simple(System.currentTimeMillis)): Unit =
+    self(maxSize, testCases, rng) match
+      case Falsified(msg, n) => println(s"!Falsified after $n passed tests:\n $msg")
+      case Passed => println(s"+OK, passed $testCases tests.")
+```
