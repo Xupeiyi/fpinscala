@@ -91,7 +91,7 @@ The signature of Par.map2:
 def map2[A, B, C](pa: Par[A], pb: Par[B])(f: (A, B) => C): Par[C]
 ```
 We are no longer calling `unit` in the recursive case. Currently, it becomes unclear 
-whether `unit` should accept its argument lazily.
+whether `unit` should accept its argument lazily anymore.
 > Choose - the laziness of `map2`
 > 1. `map2` takes its arguments lazily
 > 2. `map2` takes its arguments strictly
@@ -112,7 +112,8 @@ forked off the main thread. Invent a `fork` function
 ```scala worksheet
 def fork[A](a: => Par[A]): Par[A]
 ```
-for explicit forking. Use it to rewrite the `sum` function
+for explicit forking (the given `Par` should be run in a separate logical thread). 
+Use it to rewrite the `sum` function
 ```scala worksheet
 def sum(ints: IndexedSeq[Int]): Par[Int] =
   if ints.size <= 1 then
@@ -162,7 +163,16 @@ We rename `get` to `run`, and it needs some means to implement parallelism.
 ```scala worksheet
 extension [A](pa: Par[A]) def run: A
 ```
-
+In conclusion, by just exploring a simple example and thinking through different choices,
+we sketched out the following API:
+```scala worksheet
+def unit[A](a: A): Par[A]
+extension [A](pa: Par[A])
+  def map2[B, C](pb: Par[B])(f: (A, B) => C): Par[C]
+def fork[A](a :=> Par[A]): Par[A]
+def lazyUnit[A](a: => A): Par[A] = fork(unit(a))
+extension [A](pa: Par[A]) def run: A
+```
 ## 7.2 Picking a representation
 Make use of the Java Standard Library: java.util.concurrent.ExecutorService. 
 We can submit a Callable to ExecutorService and obtain a Future.
@@ -178,9 +188,10 @@ extension [A](pa: Par[A]) def run(s: ExecutorService): Future[A] = pa(s)
 
 ### 7.2.1 Refining the API
 In reality, there's no clear boundaries between designing the API and choosing a 
-representation.
+representation. They can influence each other fluidly.
 
-The first version of implementation:
+We will explore more about our API in this section, trying to see what's expressible.
+We begin by implementing the APIs, since we have chosen a representation for `Par[A]`:
 ```scala worksheet
 object Par:
   def unit[A](a: A): Par[A] = es => UnitFuture(a)
@@ -250,7 +261,7 @@ def parMap[A, B](ps: List[A])(f: A=> B): Par[List[B]] = fork:
 It's also possible to filter the elements in parallel using the existing methods:
 ```scala worksheet
 def parFilter[A](as: List[A])(f: A => Boolean): Par[List[A]] = fork:
-    val pars: List[Par[List[A]]] = l.map(asyncF(a => if f(a) then List(a) else List()))
+    val pars: List[Par[List[A]]] = as.map(asyncF(a => if f(a) then List(a) else List()))
     sequence(pars).map(_.flatten) 
 ```
 
@@ -283,6 +294,9 @@ see `map` cannot throw an exception before applying the function to the result. 
 can only apply `f` to `y`.
 
 ### 7.3.2 The law of forking & 7.3.3 Breaking the law: A subtle bug
+Laws about code and proofs are important because assumptions or behaviors that 
+prevent us from treating our components as black boxes makes composition difficult.
+
 It may look obvious that `fork` shouldn't affect the result of the computation:
 ```scala worksheet
 fork(x) == x
@@ -310,23 +324,29 @@ def fork[A](fa: => Par[A]): Par[A] =
 ```
 but it actually isn't creating a separate logical thread. It's still a useful
 combinator. We can call it `delay` since it delays the instantiation of a 
-computation.
+computation. (It feels like it's just making use of the `=>` mechanism of scala?)
 
 ### 7.3.4 A fully non-blocking Par implementation using actors
 (Skipping this section temporarily)
 
 ## 7.4 Refining combinators to their most general form
+Before implementing new combinators, it might be a good idea to see if they
+can be refined to their most general form.
+
 Suppose we want a function to choose between two forking computations based on
 the result of an initial computation:
 ```scala worksheet
-def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A]
+def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
   es =>
     if cond.run(es).get then t(es)
     else f(es)
 ```
 To meet a more general requirement, we can choose between N computations:
 ```scala worksheet
-def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A]
+def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A] =
+  es => 
+    val ind = n.run(es).get
+    choices(ind).run(es)
 ```
 `List` seems to be arbitrary. We can choose from a `Map`, not just a `List`:
 ```scala worksheet
@@ -336,17 +356,26 @@ def choiceMap[K, V](key: Par[K])(choices: Map[K, Par[V]]): Par[V]
 There's a function that unifies all the three functions above:
 ```scala worksheet
 extension [A](pa: Par[A]) def chooser[B](choices: A => Par[B]): Par[B]
+  es =>
+    val k = pa.run(es).get
+    choices(k).run(es)
 ```
 Since it has a more general meaning, `chooser` is no longer a suitable name.
 The second function `A => Par[B]` simply uses the result of `Par[A]`. This function
 is usually called `bind` or `flatMap`.  
 
-There are two steps in `faltMap`:
+There are two steps in `flatMap`:
 1. mapping `f: A => Par[B]` over `Par[A]`, which generates a `Par[Par[B]]`
 2. flattening `Par[Par[B]]` to `Par[B]`
 We can define a `join` function to convert `Par[Par[B]]` to `Par[B]`
 ```scala worksheet
-def join[A](ppa: Par[Par[A]]): Par[A]
+def join[A](ppa: Par[Par[A]]): Par[A] =
+  es => ppa.run(es).get.run(es)
+```
+Then `flatMap` can be implemented as:
+```scala worksheet
+extension [A](pa: Par[A]) def flatMap[B](f: A => Par[B]): Par[B] =
+  join(pa.map(f))
 ```
 
 
