@@ -174,13 +174,13 @@ def lazyUnit[A](a: => A): Par[A] = fork(unit(a))
 extension [A](pa: Par[A]) def run: A
 ```
 ## 7.2 Picking a representation
-Make use of the Java Standard Library: java.util.concurrent.ExecutorService. 
-We can submit a Callable to ExecutorService and obtain a Future.
+For representation, we can make use of the Java Standard Library.
+It allows us to submit a Callable to ExecutorService and obtain a Future.
 
-For `run` we want it to return a `Future[A]` rather than `A`, so that the caller
-of run can decide things like how long to wait for a computation, or whether
-to cancel it.
-
+We start by implementing `run`, assuming it has access to an `ExecutorService`
+and see if that suggests anything. We want it to return a `Future[A]` rather than `A`, 
+so that the caller of run can decide things like how long to wait for a computation, 
+or whether to cancel it.
 ```scala worksheet
 opaque type Par[A] = ExecutorService => Future[A]
 extension [A](pa: Par[A]) def run(s: ExecutorService): Future[A] = pa(s)
@@ -378,5 +378,10 @@ extension [A](pa: Par[A]) def flatMap[B](f: A => Par[B]): Par[B] =
   join(pa.map(f))
 ```
 
-
-
+## 7.5 Conclusion
+1. With guidance of some simple examples, design the primitives and combinators
+2. Based on some assumptions, implement the APIs and explore their expressiveness.
+3. Test the APIs with the laws/constraints they should follow, and think about 
+what kind of bugs can make them broken. 
+4. Iterate the design process by apply the APIs on more complex scenarios. Before
+implementing a new API, refine it to the most general form.
