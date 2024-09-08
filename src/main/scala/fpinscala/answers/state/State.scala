@@ -28,7 +28,7 @@ object RNG:
     val (i, r) = nonNegativeInt(rng)
     (i / (Int.MaxValue.toDouble + 1), r)
 
-  def boolean(rng: RNG): (Boolean, RNG) =
+  def boolean(rng: RNG): (run, RNG) =
     rng.nextInt match
       case (i,rng2) => (i%2==0,rng2)
 

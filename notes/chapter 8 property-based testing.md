@@ -27,12 +27,20 @@ Other ideal features for property-based testing libraries:
 This will be a messy and iterative process of discovery.
 
 ### 8.1.2 Initial snippets of an API
-We can start with `Gen`. Either `Gen.choose` or `Gen.listOf` should be parametric 
+Again we start with a simple example:
+```scala worksheet
+val intList = Gen.listOf(Gen.choose(0, 100))
+val prop =
+  Prop.forAll(intList)(ns => ns.reverse.reverse == ns) && 
+  Prop.forAll(intList)(ns => ns.headOption == ns.reverse.lastOption)
+```
+We can start with `Gen`. `Gen.choose` probably chooses a number and 
+`Gen.listOf` generates a list by choosing multiple times.
+Either `Gen.choose` or `Gen.listOf` should be parametric 
 in some type. In other words, they shouldn't care about the type of their inputs.
 ```scala worksheet
 def listOf[A](a: Gen[A]): Gen[List[A]]
 ```
-
 By examining this signature, we noticed that we're not specifying the size of the 
 list to generate. The generator need to either assume it, or be informed about it.
 It makes more sense to inform the generator about it, since having the generator
@@ -43,25 +51,35 @@ argument:
 ```scala worksheet
 def listOfN[A](n: Int, a: Gen[A]): Gen[List[A]]
 ```
-
 Another way is to wait for the function that runs the test to specify it. This might
 be helpful to the testcase minimization feature.
 
 Likewise, `Prop.forAll` shouldn't care about the types of the generator.
 ```scala worksheet
+def forAll[A](a: Gen[A])(f: A => Boolean): Prop
+```
+
+We create a new type `Prop` for the result of binding a `Gen` to a `predicate`.
+It has an `&&` operator to combine the `Prop`s.
+```scala worksheet
 trait Prop:
   def &&(that: Prop): Prop
 ```
-
 
 ### 8.1.3 The meaning and API of properties
 Now we have a `forAll` for creating a property, `&&` for combining properties and 
 `check` for running a property. 
 We cannot use the `check` in ScalaCheck as a basis of composition, and implement 
-`&&` with just that: Imagine we run `(prop1 && prop2).check`. Since `check` prints 
-a test report, we will get two independent reports. This is not what we want. 
-To combine `Prop` values using combinators like `&&`, we need `check` to return 
-some meaningful value.
+`&&` with just that. Suppose the representation is like this:
+```scala worksheet
+trait Prop:
+  def check: Unit
+  def &&(that: Prop): Prop = ???
+```
+If `check` prints a report and doesn't return a value, the only way to implement
+`&&` is to run `check` on both `Prop` values, and we will get two independent 
+reports. This is not what we want. To combine `Prop` values using combinators 
+like `&&`, we need `check` to return some meaningful value.
 
 What type should that value have? At least we need to know whether the property 
 succeeded or not. It's intuitive to think `Prop` as an equivalent of a `Boolean`,
@@ -75,7 +93,7 @@ object Prop:
 trait Prop:
   def check: Either[???, SuccessCount]
 ```
-What type shall we return in the failure case? Should we care about the type of
+What type of value shall we return in the failure case? Should we care about the type of
 test cases being generated, and have `check` return `Either[A, Int]`? We don't really, 
 since all we need to do is to print the error message to the screen without further
 computation. We are fine with just a `String`.
@@ -140,8 +158,8 @@ Now we can go back to `Prop`, which currently is:
 trait Prop:
   def check: Either[(FailedCase, SuccessCount), SuccessCount]
 ```
-We haven't specified how many test cases to examine before considering the 
-property to have passed the test. We can abstract over this dependency:
+We haven't specified the number of test cases for the property to be 
+considered as "passed". We can abstract over this dependency:
 ```scala worksheet
 opaque type TestCases = Int
 object TestCases:
@@ -151,7 +169,7 @@ object TestCases:
 opaque type Prop = TestCases => Either[(FailedCase, SuccessCount), SuccessCount]
 ```
 Besides, if a property passes, the number of success is definitely equal to the
-arguments to `check`, so we do need the `Right` case of `Either` at all. We can
+arguments to `check`, so we don't need the `Right` case of `Either` at all. We can
 turn it into an `Option`:
 ```scala worksheet
 opaque type Prop = TestCases => Option[(FailedCase, SuccessCount)]
@@ -252,6 +270,8 @@ object Prop:
       prop(max, n, rng)
       
 ```
+Is it going to cause an infinite loop?
+
 ### 8.2.1 Using the library and improving its usability
 Try using this library to construct tests and see if there's deficiencies
 in expressiveness and usability
